@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Repository.Reservations
-  ( findCount,
+  ( findCountByDate,
   )
 where
 
@@ -10,7 +10,16 @@ import Database.Esqueleto hiding ((<&>))
 import Flow
 import Model
 
-findCount :: MonadIO m => SqlReadT m (Maybe Int)
-findCount =
-  (select $ from @(SqlExpr (Entity Reservation)) $ const $ return countRows)
+findCountByDate :: MonadIO m => (Maybe UTCTime, Maybe UTCTime) -> SqlReadT m (Maybe Int)
+findCountByDate (mAfter, mBefore) =
+  ( select $
+      from $ \r -> do
+        case mAfter of
+          Just after -> where_ $ r ^. ReservationDate >=. val after
+          Nothing -> return ()
+        case mBefore of
+          Just before -> where_ $ r ^. ReservationDate >=. val before
+          Nothing -> return ()
+        return countRows
+  )
     <&> fmap unValue .> headMay

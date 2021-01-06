@@ -1,5 +1,6 @@
 module Handler.ReservationsSpec (spec) where
 
+import qualified Data.Text as T
 import Data.Time
 import Flow
 import Handler.Pagination
@@ -15,8 +16,9 @@ roundTimeToMillis (UTCTime day time) =
     |> picosecondsToDiffTime
     |> UTCTime day
 
-mkSimplePaginatedResult :: Int -> [a] -> PaginatedResult a
-mkSimplePaginatedResult = PaginatedResult defaultPaginationPage defaultPaginationSize
+mkSimplePaginatedResult :: [a] -> PaginatedResult a
+mkSimplePaginatedResult results =
+  PaginatedResult defaultPaginationPage defaultPaginationSize (length results) results
 
 type ReservationPaginatedResult = PaginatedResult (Entity Reservation)
 
@@ -34,7 +36,7 @@ spec = withApp $ do
       rKey <- runDB $ insert reservationDto
       get ReservationsR
       (res :: ReservationPaginatedResult) <- requireJSONResponse
-      let expected = mkSimplePaginatedResult 1 [Entity rKey reservationDto]
+      let expected = mkSimplePaginatedResult [Entity rKey reservationDto]
       assertEq "Body response" res expected
 
     it "should return a paginated result set" $ do
@@ -84,4 +86,52 @@ spec = withApp $ do
           setMethod "GET"
           setUrl ReservationsR
           addGetParam "size" "1001"
+        statusIs 400
+
+    it "should filter by reservation date" $ do
+      let (Just someDay) = fromGregorianValid 2000 1 1
+          someNextDay = addGregorianDurationRollOver calendarDay someDay
+          someNextNextDay = addGregorianDurationRollOver calendarDay someNextDay
+          someTime = UTCTime someDay 0
+          someNextTime = UTCTime someNextDay 0
+          someNextNextTime = UTCTime someNextNextDay 0
+          mkSimpleReservation date createdAt =
+            Reservation (T.pack $ "reference " <> show date) 2 date Nothing createdAt createdAt
+          reservationDto1 = mkSimpleReservation someTime someTime
+          reservationDto2 = mkSimpleReservation someNextTime someTime
+          reservationDto3 = mkSimpleReservation someNextNextTime someTime
+
+      rKeys <- runDB $ insertMany [reservationDto1, reservationDto2, reservationDto3]
+      let key2 = rKeys !! 1
+          expected = mkSimplePaginatedResult [Entity key2 reservationDto2]
+
+      request $ do
+        setMethod "GET"
+        setUrl ReservationsR
+        addGetParam "after" "2000-01-02"
+        addGetParam "before" "2000-01-03"
+      (res :: ReservationPaginatedResult) <- requireJSONResponse
+      assertEq "BodyResponse" res expected
+
+    describe "should return 400 if data query parameters are invalid" $ do
+      it "should fail when `after` is not a valid date" $ do
+        request $ do
+          setMethod "GET"
+          setUrl ReservationsR
+          addGetParam "after" "rubbish"
+        statusIs 400
+
+      it "should fail when `before` is not a valid date" $ do
+        request $ do
+          setMethod "GET"
+          setUrl ReservationsR
+          addGetParam "before" "2020-66-66"
+        statusIs 400
+
+      it "should fail when `after` and `before` don't represent a valid time frame" $ do
+        request $ do
+          setMethod "GET"
+          setUrl ReservationsR
+          addGetParam "after" "2000-01-02"
+          addGetParam "before" "2000-01-01"
         statusIs 400

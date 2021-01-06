@@ -50,6 +50,7 @@ default-extensions:
 - LambdaCase
 - NoImplicitPrelude
 - OverloadedStrings
+- RankNTypes
 - RecordWildCards
 - ScopedTypeVariables
 - TypeApplications
