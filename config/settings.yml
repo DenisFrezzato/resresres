@@ -36,3 +36,4 @@ database:
   database: "_env:YESOD_PGDATABASE:resresres"
   poolsize: "_env:YESOD_PGPOOLSIZE:10" 
 
+dining-room-capacity: "_env:YESOD_DINING_ROOM_CAPACITY:10"

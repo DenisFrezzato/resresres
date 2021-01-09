@@ -5,6 +5,7 @@ import Data.Aeson
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
+import Data.Time
 import Data.Validation (Validation)
 import qualified Data.Validation as V
 import Flow hiding ((<.))
@@ -61,10 +62,8 @@ getReservationsR = do
             OffsetBy offset
           ]
       findCount = R.findCountByDate (mAfterDay, mBeforeDay)
-  (reservations, mTotal) <- runDB $ concurrently findReservations findCount
-  case mTotal of
-    Just total -> returnPaginatedResult page size total reservations
-    Nothing -> sendResponseStatus status500 ("This was not supposed to happen" :: Text)
+  (reservations, total) <- runDB $ concurrently findReservations findCount
+  returnPaginatedResult page size total reservations
 
 data ReservationPostBody = ReservationPostBody
   { reference :: Text,
@@ -76,11 +75,27 @@ data ReservationPostBody = ReservationPostBody
 
 postReservationsR :: Handler Value
 postReservationsR = do
+  ReservationPostBody {..} <- parseBody
+  app <- getYesod
+  let diningRoomCapacity = app & appSettings & appDiningRoomCapacity
   now <- liftIO getCurrentTime
-  body <- (parseCheckJsonBody :: Handler (Result ReservationPostBody))
-  case body of
-    Error s -> invalidArgs [T.pack s]
-    Success ReservationPostBody {..} -> do
-      let reservationDto =
-            Reservation reference guests date notes now now
-      runDB $ insertEntity reservationDto >>= returnJson
+  let dateEnd = dateDiff (+) date
+      dateStart = dateDiff (-) date
+  takenSeats <- runDB $ R.findGuestsByDate (dateStart, dateEnd)
+  let isThereEnoughRoom = guests <= diningRoomCapacity - takenSeats
+  unless isThereEnoughRoom $ invalidArgs []
+  let reservation =
+        Reservation reference guests date notes now now
+  runDB $ insertEntity reservation >>= returnJson
+  where
+    parseBody :: HandlerFor App ReservationPostBody
+    parseBody =
+      parseCheckJsonBody >>= \case
+        Error s -> invalidArgs [T.pack s]
+        Success x -> return x
+
+    dateDiff :: (DiffTime -> DiffTime -> DiffTime) -> UTCTime -> UTCTime
+    dateDiff f date =
+      let oneHour = secondsToDiffTime (60 * 60)
+       in date
+            & \(UTCTime d t) -> UTCTime d (f t oneHour)

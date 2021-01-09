@@ -53,6 +53,7 @@ data AppSettings = AppSettings
     -- Example app-specific configuration values.
     , appAuthDummyLogin         :: Bool
     -- ^ Indicate if auth dummy login should be enabled.
+    , appDiningRoomCapacity :: Int
     }
 
 instance FromJSON AppSettings where
@@ -77,6 +78,7 @@ instance FromJSON AppSettings where
         appSkipCombining          <- o .:? "skip-combining"   .!= dev
 
         appAuthDummyLogin         <- o .:? "auth-dummy-login"      .!= dev
+        appDiningRoomCapacity <- o .: "dining-room-capacity"
 
         return AppSettings {..}
 

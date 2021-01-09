@@ -13,6 +13,7 @@ import Database.Persist as X hiding (get)
 import Database.Persist.Sql (SqlPersistM, connEscapeName, rawExecute, rawSql, runSqlPersistMPool, unSingle)
 import Foundation as X
 import Model as X
+import Settings
 import Test.Hspec as X
 import Yesod.Auth as X
 import Yesod.Core.Unsafe (fakeHandlerGetLogger)
@@ -40,6 +41,19 @@ withApp = before $ do
       []
       useEnv
   foundation <- makeFoundation settings
+  wipeDB foundation
+  logWare <- liftIO $ makeLogWare foundation
+  return (foundation, logWare)
+
+withAppWithCapacity :: Int -> SpecWith (TestApp App) -> Spec
+withAppWithCapacity capacity = before $ do
+  settings <-
+    loadYamlSettings
+      ["config/test-settings.yml", "config/settings.yml"]
+      []
+      useEnv
+  let settingsWithCapacity = settings {appDiningRoomCapacity = capacity}
+  foundation <- makeFoundation settingsWithCapacity
   wipeDB foundation
   logWare <- liftIO $ makeLogWare foundation
   return (foundation, logWare)
